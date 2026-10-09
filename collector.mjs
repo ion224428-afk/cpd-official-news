@@ -111,17 +111,7 @@ async function fetchText(url) {
     console.log('Official source accessible with system HTTP client.');
     return text;
   } catch {}
-  const {chromium}=await import('playwright');
-  const browser=await chromium.launch({headless:true,channel:'chrome'});
-  try {
-    const page=await browser.newPage();
-    const result=await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
-    if (!result?.ok()) throw new Error('Official browser source returned '+result?.status());
-    const text=await page.content();
-    if (text.length>1500000) throw new Error('Official response exceeded limit');
-    console.log('Official source accessible in browser.');
-    return text;
-  } finally {await browser.close();}
+  throw new Error('Official source unavailable; previous feed preserved.');
 }
 export async function getOfficialNews() {
     const [fmcsa, relay] = await Promise.allSettled([fetchText(FMCSA_NEWS_URL), fetchText(AMAZON_RELAY_RSS_URL)]);
