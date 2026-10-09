@@ -97,13 +97,31 @@ export function parseAmazonRelayRss(xml) {
     return items;
 }
 async function fetchText(url) {
-    const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", Accept: "text/html,application/rss+xml,application/xml;q=0.9", "Accept-Language": "en-US,en;q=0.9" }, signal: AbortSignal.timeout(8000) });
-    if (!response.ok)
-        throw new Error(`Official news source returned ${response.status}`);
-    const text = await response.text();
-    if (text.length > 1_500_000)
-        throw new Error("Official news response exceeded the size limit");
+  const response = await fetch(url, {signal:AbortSignal.timeout(15000)});
+  if (response.ok) {
+    const text=await response.text();
+    if (text.length>1500000) throw new Error('Official response exceeded limit');
     return text;
+  }
+  if (response.status!==403) throw new Error('Official source returned '+response.status);
+  const {execFileSync}=await import('node:child_process');
+  try {
+    const text=execFileSync('curl',['--fail','--silent','--show-error','--location','--max-time','20',url],{encoding:'utf8',maxBuffer:1500000});
+    if (text.length>1500000) throw new Error('Official response exceeded limit');
+    console.log('Official source accessible with system HTTP client.');
+    return text;
+  } catch {}
+  const {chromium}=await import('playwright');
+  const browser=await chromium.launch({headless:true,channel:'chrome'});
+  try {
+    const page=await browser.newPage();
+    const result=await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
+    if (!result?.ok()) throw new Error('Official browser source returned '+result?.status());
+    const text=await page.content();
+    if (text.length>1500000) throw new Error('Official response exceeded limit');
+    console.log('Official source accessible in browser.');
+    return text;
+  } finally {await browser.close();}
 }
 export async function getOfficialNews() {
     const [fmcsa, relay] = await Promise.allSettled([fetchText(FMCSA_NEWS_URL), fetchText(AMAZON_RELAY_RSS_URL)]);
